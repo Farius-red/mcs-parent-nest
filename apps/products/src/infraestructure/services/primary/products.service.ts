@@ -5,6 +5,10 @@ import { PlantillaResponse } from 'juliaositembackenexpress/src/utils/PlantillaR
 
 @Injectable()
 export class ProductsService implements ProductsInter {
+  
+  delete(idBussines: string, idEntidad: string, entidad: PlantillaResponse<ProductDTO>): PlantillaResponse<ProductDTO> {
+    throw new Error('Method not implemented.');
+  }
 // aqui implementa la logica para los productos 
 
   findByIdBussines(idBussines: string): PlantillaResponse<ProductDTO> {

@@ -4,6 +4,8 @@ import { PlantillaResponse } from 'juliaositembackenexpress/src/utils/PlantillaR
 import { ProductDTO } from 'juliaositembackenexpress/src/api/dtos/productos/ProductosDTO';
 
 
-export interface ProductsInter extends juliasistemCrud<PlantillaResponse<ProductDTO>>{
+import {CrudInterface} from '../../../../../../../juliaositemBackenExpress/src/utils/funtions/crudInterface';
+
+export interface ProductsInter extends CrudInterface<PlantillaResponse<ProductDTO>>{
     
 }

@@ -1,4 +1,6 @@
-{
+{  
+  "version" :"0.1",
+  "projectName": "products",
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "declaration": false,
