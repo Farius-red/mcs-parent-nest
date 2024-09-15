@@ -1,20 +1,40 @@
 import { NestFactory } from '@nestjs/core';
-import { ProductsModule } from './products.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import * as dotenv from 'dotenv';
+import { McsKafkaNestModule } from './mcs-kafka-nest.module';
+import { MicroserviceOptions, Transport } from '@nestjs/microservices';
+import { Partitioners } from 'kafkajs';
+dotenv.config();
 
 async function bootstrap() {
-  const app = await NestFactory.create(ProductsModule);
+  const app = await NestFactory.create(McsKafkaNestModule);
+
+  app.connectMicroservice({
+    name: 'KAFKA_SERVICE',
+    transport: Transport.KAFKA,
+    options: {
+      client: {
+        brokers: ['localhost:9092'],
+        createPartitioner: Partitioners.LegacyPartitioner,
+      },
+      consumer: {
+        groupId: 'consumer-nest-client',
+      },
+    },
+  }) as MicroserviceOptions;
+
+  app.startAllMicroservices();
 
   const config = new DocumentBuilder()
-    .setTitle('API Documentation Productos')
-    .setDescription('se encarga de manejar toda la parte de productos')
+    .setTitle('API Documentation kafka')
+    .setDescription('se encarga de manejar los mensajes a kafka')
+    .addTag('Kafka')
     .setVersion('1.0')
     .build();
   dotenv.config();
-  const port = process.env.PORT_PRODUCTS || 3001;
+  const port = process.env.PORT_KAFKA || 3002;
 
-  const basePath = 'products';
+  const basePath = 'documentacion';
   const logo = `
     __  __   __  ___      __    _______  _______  _______  ___   _______  _______  _______  __   __
    |  ||  | |  ||   |    |__|  |   _   ||       ||       ||   | |       ||       ||       ||  |_|  |
@@ -25,29 +45,29 @@ async function bootstrap() {
  |____||_______||_______||___| |__| |__||_______||_______||___| |_______|  |___|  |_______||_|   |_|
 
 `;
+
   console.log(logo);
 
   try {
     // Extrae la versión y el nombre del proyecto
-    const version = process.env.PRODUCTS_VERSION || 'No especificada';
+    const version = process.env.KAFKA_VERSION || 'No especificada';
     const projectName = basePath;
-    const productsUrl =
-      process.env.PRODUCTS_URL + `${basePath}` ||
-      `http://localhost:${port}/${basePath}`;
+    const url = `http://localhost:${port}/${basePath}`;
 
     // Imprime la información adicional
+    console.log(process.env.URL_KAFKA);
     console.log(`
  Project Name: ${projectName}
  Version: ${version}
  Build Date: ${new Date().toLocaleString()}
- Project URL: ${productsUrl}
+ Project URL: ${url}
   `);
   } catch (error) {
     console.error('Error reading/parsing tsconfig.app.json:', error);
   }
 
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('products', app, document);
+  SwaggerModule.setup('documentacion', app, document);
   await app.listen(port);
 }
 bootstrap();

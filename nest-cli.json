@@ -19,6 +19,15 @@
         "tsConfigPath": "apps/mcs-parent-nest/tsconfig.app.json"
       }
     },
+    "mcs-kafka-nest": {
+      "type": "application",
+      "root": "apps/mcs-kafka-nest",
+      "entryFile": "main",
+      "sourceRoot": "apps/mcs-kafka-nest/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/mcs-kafka-nest/tsconfig.app.json"
+      }
+    },
     "products": {
       "type": "application",
       "root": "apps/products",
