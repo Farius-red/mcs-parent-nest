@@ -13,6 +13,9 @@ async function bootstrap() {
     name: 'KAFKA_SERVICE',
     transport: Transport.KAFKA,
     options: {
+      subscribe: {
+        fromBeginning: true,
+      },
       client: {
         brokers: ['localhost:9092'],
         createPartitioner: Partitioners.LegacyPartitioner,

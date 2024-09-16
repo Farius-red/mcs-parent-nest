@@ -10,8 +10,14 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
         name: 'KAFKA_SERVICE',
         transport: Transport.KAFKA,
         options: {
+          subscribe: {
+            fromBeginning: true,
+          },
           client: {
             brokers: ['localhost:9092'],
+          },
+          consumer: {
+            groupId: 'consumer-nest-client',
           },
         },
       },

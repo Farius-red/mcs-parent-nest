@@ -1,7 +1,6 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { ClientKafka, MessagePattern } from '@nestjs/microservices';
-import { from } from 'rxjs';
+import { ClientKafka } from '@nestjs/microservices';
 
 @Injectable()
 export class McsKafkaNestService implements OnModuleInit {
@@ -16,12 +15,6 @@ export class McsKafkaNestService implements OnModuleInit {
   }
 
   async sendMessage(topic: string, message: any) {
-    return this.kafkaClient.emit(topic, { message });
-  }
-
-  @MessagePattern('my-topic')
-  handleMessage(message: any) {
-    console.log('Received message:', message.value);
-    return from(Promise.resolve('Message received'));
+    return this.kafkaClient.emit(topic, message);
   }
 }
