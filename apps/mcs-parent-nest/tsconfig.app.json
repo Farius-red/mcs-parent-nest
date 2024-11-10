@@ -2,8 +2,14 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "declaration": false,
-    "outDir": "../../dist/apps/mcs-parent-nest"
+    "outDir": "../../dist/apps/mcs-parent-nest",
+    "baseUrl": ".", 
+    "paths": {
+       "*": ["node_modules/*", "src/*"],
+      "juliaositembackenexpress/*": ["node_modules/juliaositembackenexpress/*"],
+      "juliaositembackenexpress/src/utils/*":["node_modules/juliaositembackenexpress/src/utils/app.ts"]
+    }
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "node_modules/juliaositembackenexpress/src/*"],
   "exclude": ["node_modules", "dist", "test", "**/*spec.ts"]
 }

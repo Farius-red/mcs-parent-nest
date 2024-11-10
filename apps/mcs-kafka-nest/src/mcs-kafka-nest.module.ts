@@ -26,9 +26,10 @@ import { KafkaListenerModule } from './kafka-listener/kafka-listener.module';
     ]),
     RedisModule.forRoot({
       options: undefined,
-        type: 'single',
-        url: 'juliaosystem.server:30007',}),
-    KafkaListenerModule
+      type: 'single',
+      url: 'juliaosystem.server:30007',
+    }),
+    KafkaListenerModule,
   ],
   controllers: [McsKafkaNestController],
   providers: [McsKafkaNestService],
