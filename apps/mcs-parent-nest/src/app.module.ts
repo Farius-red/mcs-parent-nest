@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { AppService } from './app.service';
-import { WebhookModule } from './modulos/webhook/webhook.module';
+import { WebhookModule } from './modulos/webhook.module';
 
 @Module({
   imports: [WebhookModule],
