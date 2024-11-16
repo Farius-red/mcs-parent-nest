@@ -6,9 +6,12 @@ import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class WebhookService {
-  constructor(private readonly taigaSvc: TaigaService , private configService: ConfigService) {}
+  constructor(
+    private readonly taigaSvc: TaigaService,
+    private configService: ConfigService,
+  ) {}
 
-   headers = {
+  headers = {
     Authorization: `Bearer ${this.configService.get<string>('GITHUB_TOKEN')}`,
     Accept: 'application/vnd.github.v3+json',
   };
@@ -18,7 +21,7 @@ export class WebhookService {
    * en GitHub basado en el payload recibido de taiga .
    * @returns Una promesa con el resultado de la operación (creación o actualización de issue).
    */
-  async sendTaskGit(payload: any):Promise<String> {
+  async sendTaskGit(payload: any): Promise<string> {
     try {
       const res = await this.checkActionGit(payload);
 
@@ -49,10 +52,10 @@ export class WebhookService {
    *
    * @returns Promesa de la operación de actualización en Taiga si la rama se crea correctamente.
    */
-  async manageCreateBranch (
+  async manageCreateBranch(
     res: DataResponseDTO,
     ramaName: string,
-  ):Promise<String> {
+  ): Promise<string> {
     try {
       const isBranchCreated = await this.createGithubBranch(
         res.config.url,
@@ -98,7 +101,7 @@ export class WebhookService {
       payload.data.subject.length > 0
     ) {
       const description = payload.data.description;
-      const urlRegex = /(https?:\/\/[^\s]+)/g;
+      const urlRegex = /https:\/\/api\.github\.com\/repos[^\s]*/g;
       const repoUrl = description.match(urlRegex)?.[0];
 
       if (repoUrl) {
@@ -142,7 +145,6 @@ export class WebhookService {
   ): Promise<number | null> {
     try {
       const updatedConfig = {
-
         url: `${config.url}/issues?state=open`,
         method: 'GET',
         headers: this.headers,
@@ -164,7 +166,11 @@ export class WebhookService {
    * @param body - La descripción del issue.
    * @param repoUrl - La URL del repositorio donde se creará el issue.
    */
-  async createGithubIssue(title: string, body: string, repoUrl: string) : Promise<string> {
+  async createGithubIssue(
+    title: string,
+    body: string,
+    repoUrl: string,
+  ): Promise<string> {
     const data = { title, body };
     const config: AxiosRequestConfig = {
       url: `${repoUrl}/issues`,
@@ -176,10 +182,10 @@ export class WebhookService {
     try {
       await axios.post(config.url, config.data, config);
 
-      return 'Issue creado con éxito en GitHub'
+      return 'Issue creado con éxito en GitHub';
     } catch (error) {
       console.error('Error al crear el issue en GitHub:', error);
-      return  'Error al crear el issue en GitHub'
+      return 'Error al crear el issue en GitHub';
     }
   }
 
@@ -190,7 +196,11 @@ export class WebhookService {
    */
   async createGithubBranch(repoUrl: string, branchName: string) {
     const repoApiUrl = `${repoUrl}/git/refs`;
-    const config: AxiosRequestConfig = { method: 'GET', headers: this.headers, url:repoUrl };
+    const config: AxiosRequestConfig = {
+      method: 'GET',
+      headers: this.headers,
+      url: repoUrl,
+    };
 
     try {
       const { data: defaultBranchData } = await this.getLastCommit(config);
@@ -199,7 +209,7 @@ export class WebhookService {
       const branchConfig: AxiosRequestConfig = {
         headers: this.headers,
         method: 'POST',
-        timeout: 5000
+        timeout: 5000,
       };
 
       await axios.post(repoApiUrl, data, branchConfig);
