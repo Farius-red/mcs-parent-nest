@@ -1,9 +1,13 @@
 {
+    "rootDirectory": "./",
     "version": 2,
     "builds": [
       {
         "src": "apps/mcs-parent-nest/src/main.ts",
-        "use": "@vercel/node"
+        "use": "@vercel/node",
+        "config": {
+          "distDir": "dist/apps/mcs-parent-nest"
+        }
       }
     ],
     "routes": [
@@ -13,4 +17,5 @@
       }
     ]
   }
+  
   
