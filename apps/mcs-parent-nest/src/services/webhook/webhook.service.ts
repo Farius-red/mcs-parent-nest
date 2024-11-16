@@ -205,18 +205,18 @@ export class WebhookService {
     try {
       const { data: defaultBranchData } = await this.getLastCommit(config);
       const sha = defaultBranchData.sha;
-      const data = { ref: `refs/heads/${branchName}`, sha };
+      const data = { ref: `refs/heads/${branchName.replace(/\s+/g, '')}`, sha };
       const branchConfig: AxiosRequestConfig = {
         headers: this.headers,
         method: 'POST',
-        timeout: 5000,
+        timeout: 15000,
       };
 
-      await axios.post(repoApiUrl, data, branchConfig);
+      await axios.post(`${repoApiUrl}`, data, branchConfig);
       console.log(`Rama ${branchName} creada con éxito.`);
     } catch (error) {
       console.error('Error al crear la rama:', error);
-      throw new Error('No se pudo crear la rama en GitHub');
+      return 'Error al crear la ramma en git';
     }
   }
 

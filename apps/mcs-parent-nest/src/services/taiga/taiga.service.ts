@@ -82,7 +82,7 @@ export class TaigaService {
 
       const  data :any = {
         version :  version.data.version ,
-        comment : `Se inicia tarea clonar repositorio asi  git clone --branch ${nameBranch}  ${cloneUrl}`,
+        comment : `Se inicia tarea clonar repositorio asi  git clone --branch ${nameBranch.replace(/\s+/g, '')}  ${cloneUrl}`,
       }
 
       await axios.patch(url, data, config);
