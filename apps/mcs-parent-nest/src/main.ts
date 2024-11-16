@@ -14,7 +14,7 @@ async function bootstrap() {
     .build();
   dotenv.config();
 
-  const port = process.env.PORT_REDIS || 3000;
+  const port = 3005;
   await app
     .listen(port)
     .catch((error) => console.error('no se puede iniciar app ', error));

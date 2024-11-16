@@ -80,7 +80,7 @@ export class TaigaService {
         console.error('TaigaService.updateTaiga() error al obtener version  ', error);
        }
 
-      let  data :any = {
+      const  data :any = {
         version :  version.data.version ,
         comment : `Se inicia tarea clonar repositorio asi  git clone --branch ${nameBranch}  ${cloneUrl}`,
       }
