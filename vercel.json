@@ -3,16 +3,15 @@
     "builds": [
       {
         "src": "Dockerfile",
-        "use": "@vercel/docker"
+        "use": "@vercel/static-build"
       }
     ],
     "routes": [
       {
         "src": "/(.*)",
-        "dest": "/main.js"
+        "dest": "/dist/apps/mcs-parent-nest/main.js"
       }
     ]
   }
-  
   
   
