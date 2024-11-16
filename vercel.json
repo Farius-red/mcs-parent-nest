@@ -1,0 +1,16 @@
+{
+    "version": 2,
+    "builds": [
+      {
+        "src": "apps/mcs-parent-nest/src/main.ts",
+        "use": "@vercel/node"
+      }
+    ],
+    "routes": [
+      {
+        "src": "/(.*)",
+        "dest": "dist/apps/mcs-parent-nest/main.js"
+      }
+    ]
+  }
+  
