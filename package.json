@@ -6,9 +6,9 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
-    "build": "nest build mcs-parent-nest",
+    "build": "nest build --workspace=mcs-parent-nest",
     "format": "prettier --write \"apps/**/*.ts\" \"libs/**/*.ts\"",
-    "start": "nest start ",
+    "start": "node dist/apps/mcs-parent-nest/main.js",
     "start:dev": "nest start --watch",
     "start:mcs-kafka": "nest start mcs-kafka-nest --watch",
     "start:mcs-parent-nest": "nest start mcs-parent-nest --debug --watch",
