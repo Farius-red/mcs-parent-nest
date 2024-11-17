@@ -8,5 +8,7 @@ import { AppController } from './app.controller';
   imports: [WebhookModule],
   providers: [AppService],
   controllers: [AppController],
+  exports: [AppService],
+
 })
 export class AppModule {}
