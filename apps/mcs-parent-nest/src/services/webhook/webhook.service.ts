@@ -66,8 +66,8 @@ export class WebhookService {
         ramaName,
       );
 
-      if (isBranchCreated != null) {
-        return "Error: No se pudo crear la rama, abortando el proceso.";
+      if (isBranchCreated.match("Error")) {
+        return  isBranchCreated;
       }
 
       const issueNumber = await this.findGithubIssue(
@@ -202,7 +202,7 @@ export class WebhookService {
    * @param repoUrl - La URL del repositorio donde se creará la rama.
    * @param branchName - El nombre de la nueva rama.
    */
-  async createGithubBranch(repoUrl: string, branchName: string) {
+  async createGithubBranch(repoUrl: string, branchName: string):Promise<string> {
     const repoApiUrl = `${repoUrl}/git/refs`;
     const config: AxiosRequestConfig = {
       method: "GET",
@@ -221,10 +221,13 @@ export class WebhookService {
       };
 
       await axios.post(`${repoApiUrl}`, data, branchConfig);
-      console.log(`Rama ${branchName} creada con éxito.`);
+      return `Rama ${branchName} creada con éxito.`
     } catch (error) {
       console.error("Error al crear la rama:", error);
-      return `Error al crear la ramma en git: ${this.appSvc.getFormattedDateTime()} `;
+      if(error.response.data.message === "Reference already exists") {
+        return  `Error No se pudo crear La rama con nombre ${branchName} porque ya existe en el repo : ${this.appSvc.getFormattedDateTime()} Hora Colombiana`;
+      }
+       return `Error: No se pudo crear la rama, abortando el proceso. ${this.appSvc.getFormattedDateTime()} Hora Colombiana`;
     }
   }
 
@@ -238,7 +241,7 @@ export class WebhookService {
       return await axios.get(`${config.url}/commits/develop`, config);
     } catch (error) {
       console.error("webhookService.getLasCommit() ", error);
-      throw new Error("No se pudo obtener el último commit");
+      return `No se pudo obtener el último commit ${this.appSvc.getFormattedDateTime()} Hora Colombiana`;
     }
   }
 
