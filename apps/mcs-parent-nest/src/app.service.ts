@@ -5,17 +5,19 @@ export class AppService {
   getFormattedDateTime(): string {
     const now = new Date();
 
-    const day = String(now.getDate()).padStart(2, "0");
-    const month = String(now.getMonth() + 1).padStart(2, "0");
-    const year = now.getFullYear();
+    const options: Intl.DateTimeFormatOptions = {
+      timeZone: "America/Bogota",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    };
 
-    let hours = now.getHours();
-    const minutes = String(now.getMinutes()).padStart(2, "0");
-    const ampm = hours >= 12 ? "pm" : "am";
-    hours = hours % 12 || 12; // Convertir a formato de 12 horas
+    const formattedDateTime = now.toLocaleString("es-CO", options);
 
-    const date = `${day}/${month}/${year}`;
-    const time = `${hours}:${minutes} ${ampm}`;
+    const [date, time] = formattedDateTime.split(", ");
 
     return `${date} : ${time}`;
   }
