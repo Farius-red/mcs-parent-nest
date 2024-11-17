@@ -1,19 +1,21 @@
-import { Injectable } from '@nestjs/common';
-import axios, { AxiosRequestConfig } from 'axios';
-import { DataResponseDTO } from '../../responses/dataResponseDTO';
-import { TaigaService } from '../taiga/taiga.service';
-import { ConfigService } from '@nestjs/config';
+import { AppService } from "./../../app.service";
+import { Injectable } from "@nestjs/common";
+import axios, { AxiosRequestConfig } from "axios";
+import { DataResponseDTO } from "../../responses/dataResponseDTO";
+import { TaigaService } from "../taiga/taiga.service";
+import { ConfigService } from "@nestjs/config";
 
 @Injectable()
 export class WebhookService {
   constructor(
     private readonly taigaSvc: TaigaService,
     private configService: ConfigService,
+    private appSvc: AppService,
   ) {}
 
   headers = {
-    Authorization: `Bearer ${this.configService.get<string>('GITHUB_TOKEN')}`,
-    Accept: 'application/vnd.github.v3+json',
+    Authorization: `Bearer ${this.configService.get<string>("GITHUB_TOKEN")}`,
+    Accept: "application/vnd.github.v3+json",
   };
 
   /**
@@ -25,7 +27,7 @@ export class WebhookService {
     try {
       const res = await this.checkActionGit(payload);
 
-      if (res.data.res === 'CREATE_ISSUE') {
+      if (res.data.res === "CREATE_ISSUE") {
         return await this.createGithubIssue(
           res.data.title,
           res.data.description,
@@ -33,12 +35,14 @@ export class WebhookService {
         );
       }
 
-      if (res.data.res === 'UPDATE_ISSUE') {
+      if (res.data.res === "UPDATE_ISSUE") {
         const ramaName = `${res.data.ref}-${res.data.title}`;
         return await this.manageCreateBranch(res, ramaName);
       }
+      return `No entro a ningun cambio de tarea valido ${this.appSvc.getFormattedDateTime()}`;
     } catch (error) {
-      console.error('Error en sendTaskGit:', error);
+      console.error("Error en sendTaskGit:", error);
+      return `Algo Salio mal al an enviar Task a Git: ${this.appSvc.getFormattedDateTime()}`;
     }
   }
 
@@ -63,10 +67,13 @@ export class WebhookService {
       );
 
       if (isBranchCreated != null) {
-        return  'Error: No se pudo crear la rama, abortando el proceso.';
+        return "Error: No se pudo crear la rama, abortando el proceso.";
       }
 
-      const issueNumber = await this.findGithubIssue(res.data.title, res.config);
+      const issueNumber = await this.findGithubIssue(
+        res.data.title,
+        res.config,
+      );
 
       if (issueNumber) {
         await this.associateBranchWithIssue(
@@ -80,13 +87,13 @@ export class WebhookService {
         return await this.taigaSvc.updateTaigaTask(
           res.data.id,
           repoUrlClone,
-          ramaName
+          ramaName,
         );
-      }else {
-        return `Se creo la Ramma con nombre ${ramaName} pero no se pudo asociar un asunto  en GIT`
+      } else {
+        return `Se creo la Ramma con nombre ${ramaName} pero no se pudo asociar un asunto  en GIT`;
       }
     } catch (error) {
-      console.error('Error en manageCreateBranch:', error);
+      console.error("Error en manageCreateBranch:", error);
     }
   }
 
@@ -115,13 +122,14 @@ export class WebhookService {
           },
         };
 
-        if (payload.action === 'create' && payload.type === 'userstory') {
-          response.data.res = 'CREATE_ISSUE';
+        if (payload.action === "create" && payload.type === "userstory") {
+          response.data.res = "CREATE_ISSUE";
         } else if (
-          payload.action === 'change' &&
-          payload.type === 'userstory'
+          payload.action === "change" &&
+          payload.type === "userstory" &&
+          payload.change.diff.status.to === "In progress"
         ) {
-          response.data.res = 'UPDATE_ISSUE';
+          response.data.res = "UPDATE_ISSUE";
         }
 
         return response;
@@ -129,7 +137,7 @@ export class WebhookService {
     }
 
     throw new Error(
-      'Datos de payload no válidos para crear o actualizar un issue.',
+      "Datos de payload no válidos para crear o actualizar un issue.",
     );
   }
 
@@ -146,7 +154,7 @@ export class WebhookService {
     try {
       const updatedConfig = {
         url: `${config.url}/issues?state=open`,
-        method: 'GET',
+        method: "GET",
         headers: this.headers,
       };
       const response = await axios.get(updatedConfig.url, updatedConfig);
@@ -155,8 +163,8 @@ export class WebhookService {
 
       return issue ? issue.number : null;
     } catch (error) {
-      console.error('Error al buscar el issue:', error);
-      throw new Error('Error al buscar el issue en GitHub');
+      console.error("Error al buscar el issue:", error);
+      throw new Error("Error al buscar el issue en GitHub");
     }
   }
 
@@ -174,7 +182,7 @@ export class WebhookService {
     const data = { title, body };
     const config: AxiosRequestConfig = {
       url: `${repoUrl}/issues`,
-      method: 'POST',
+      method: "POST",
       data,
       headers: this.headers,
     };
@@ -182,10 +190,10 @@ export class WebhookService {
     try {
       await axios.post(config.url, config.data, config);
 
-      return 'Issue creado con éxito en GitHub';
+      return "Issue creado con éxito en GitHub";
     } catch (error) {
-      console.error('Error al crear el issue en GitHub:', error);
-      return 'Error al crear el issue en GitHub';
+      console.error("Error al crear el issue en GitHub:", error);
+      return "Error al crear el issue en GitHub";
     }
   }
 
@@ -197,7 +205,7 @@ export class WebhookService {
   async createGithubBranch(repoUrl: string, branchName: string) {
     const repoApiUrl = `${repoUrl}/git/refs`;
     const config: AxiosRequestConfig = {
-      method: 'GET',
+      method: "GET",
       headers: this.headers,
       url: repoUrl,
     };
@@ -205,18 +213,18 @@ export class WebhookService {
     try {
       const { data: defaultBranchData } = await this.getLastCommit(config);
       const sha = defaultBranchData.sha;
-      const data = { ref: `refs/heads/${branchName.replace(/\s+/g, '')}`, sha };
+      const data = { ref: `refs/heads/${branchName.replace(/\s+/g, "")}`, sha };
       const branchConfig: AxiosRequestConfig = {
         headers: this.headers,
-        method: 'POST',
+        method: "POST",
         timeout: 15000,
       };
 
       await axios.post(`${repoApiUrl}`, data, branchConfig);
       console.log(`Rama ${branchName} creada con éxito.`);
     } catch (error) {
-      console.error('Error al crear la rama:', error);
-      return 'Error al crear la ramma en git';
+      console.error("Error al crear la rama:", error);
+      return `Error al crear la ramma en git: ${this.appSvc.getFormattedDateTime()} `;
     }
   }
 
@@ -229,8 +237,8 @@ export class WebhookService {
     try {
       return await axios.get(`${config.url}/commits/develop`, config);
     } catch (error) {
-      console.error('webhookService.getLasCommit() ', error);
-      throw new Error('No se pudo obtener el último commit');
+      console.error("webhookService.getLasCommit() ", error);
+      throw new Error("No se pudo obtener el último commit");
     }
   }
 
@@ -248,17 +256,19 @@ export class WebhookService {
     try {
       const config: AxiosRequestConfig = {
         headers: this.headers,
-        method: 'POST',
+        method: "POST",
         url: `${repoUrl}/issues/${issueNumber}/comments`,
-        data: {body:`La rama ${branchName} ha sido creada para esta tarea y ya se inicio el desarrollo`},
-         timeout: 6000
+        data: {
+          body: `La rama ${branchName} ha sido creada para esta tarea y ya se inicio el desarrollo`,
+        },
+        timeout: 6000,
       };
 
       await axios.post(config.url, config.data, config);
       console.log(`Rama ${branchName} asociada con el issue #${issueNumber}`);
     } catch (error) {
-      console.error('Error al asociar la rama con el issue:', error);
-      throw new Error('No se pudo asociar la rama con el issue');
+      console.error("Error al asociar la rama con el issue:", error);
+      throw new Error("No se pudo asociar la rama con el issue");
     }
   }
 
@@ -269,8 +279,8 @@ export class WebhookService {
    */
   getCloneUrl(repoUrl: string): string {
     const repoUrlWeb = repoUrl.replace(
-      'https://api.github.com/repos',
-      'https://github.com',
+      "https://api.github.com/repos",
+      "https://github.com",
     );
     return `${repoUrlWeb}.git`;
   }
