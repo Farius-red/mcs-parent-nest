@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common';
-import axios, { AxiosRequestConfig } from 'axios';
+import { Injectable } from "@nestjs/common";
+import axios, { AxiosRequestConfig } from "axios";
+import { AppService } from "../../app.service";
 
 /**
  * Servicio que interactúa con la API de Taiga para obtener el token de autenticación
@@ -10,6 +11,8 @@ export class TaigaService {
   private userName: string = process.env.GIT_USER; // Nombre de usuario de Taiga
   private password: string = process.env.TIAGA_PASSWORD; // Contraseña de Taiga
 
+  constructor(private appSvc: AppService) {}
+
   /**
    * Obtiene el token de autenticación de Taiga usando el nombre de usuario y la contraseña.
    *
@@ -19,26 +22,26 @@ export class TaigaService {
   async obtenerTokenTaiga(): Promise<string> {
     try {
       if (!this.userName || !this.password) {
-        throw new Error('Las credenciales de GitHub no están configuradas');
+        throw new Error("Las credenciales de GitHub no están configuradas");
       }
 
-      const response = await axios.post('https://api.taiga.io/api/v1/auth', {
-        type: 'normal',
+      const response = await axios.post("https://api.taiga.io/api/v1/auth", {
+        type: "normal",
         username: this.userName,
         password: this.password,
       });
 
-      const token:any = response.data.auth_token;
+      const token: any = response.data.auth_token;
       if (!token) {
-        throw new Error('No se recibió el token de Taiga');
+        throw new Error("No se recibió el token de Taiga");
       }
       return token;
     } catch (error) {
       console.error(
-        'TaigaService.obtenerTokenTaiga():',
+        "TaigaService.obtenerTokenTaiga():",
         error.response ? error.response.data : error.message,
       );
-      return null;
+      return `Error al obtener token de taiga: ${this.appSvc.getFormattedDateTime()}`;
     }
   }
 
@@ -57,41 +60,42 @@ export class TaigaService {
   async updateTaigaTask(
     taskId: number,
     cloneUrl: string,
-    nameBranch: string
+    nameBranch: string,
   ): Promise<string> {
     const url = `https://api.taiga.io/api/v1/userstories/${taskId}`;
-    let version : any
+    let version: any;
     try {
-      const token : any= await this.obtenerTokenTaiga();
+      const token: any = await this.obtenerTokenTaiga();
       if (!token) {
-        throw new Error('No se pudo obtener el token de Taiga');
+        throw new Error("No se pudo obtener el token de Taiga");
       }
       const config: AxiosRequestConfig = {
-        method: 'PATCH',
+        method: "PATCH",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
       };
 
-       try {
-           version = await axios.get(url, config);
-       }catch (error) {
-        console.error('TaigaService.updateTaiga() error al obtener version  ', error);
-       }
-
-      const  data :any = {
-        version :  version.data.version ,
-        comment : `Se inicia tarea clonar repositorio asi  git clone --branch ${nameBranch.replace(/\s+/g, '')}  ${cloneUrl}`,
+      try {
+        version = await axios.get(url, config);
+      } catch (error) {
+        console.error(
+          "TaigaService.updateTaiga() error al obtener version  ",
+          error,
+        );
       }
 
-      await axios.patch(url, data, config);
-      console.log('Tarea de Taiga actualizada Correcta Mente');
-      return 'Tarea de Taiga actualizada Correcta Mente' ;
-    } catch (error) {
+      const data: any = {
+        version: version.data.version,
+        comment: `Se inicia tarea clonar repositorio asi  git clone --branch ${nameBranch.replace(/\s+/g, "")}  ${cloneUrl}`,
+      };
 
-      console.error('Error al actualizar la tarea en Taiga:', error);
-      return  'Error al actualizar la tarea en Taiga'
+      await axios.patch(url, data, config);
+      return `Tarea de Taiga actualizada Correcta Mente ${this.appSvc.getFormattedDateTime()}`;
+    } catch (error) {
+      console.error("Error al actualizar la tarea en Taiga:", error);
+      return `Error al actualizar la tarea en Taiga ${this.appSvc.getFormattedDateTime()}`;
     }
   }
 }
