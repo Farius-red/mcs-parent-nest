@@ -26,7 +26,7 @@ export class WebhookService {
   async sendTaskGit(payload: any): Promise<string> {
     try {
       const res = await this.checkActionGit(payload);
-
+      const ramaName = `${res.data.ref}-${res.data.title}`;
       if (res.data.res === "CREATE_ISSUE") {
         return await this.createGithubIssue(
           res.data.title,
@@ -36,8 +36,10 @@ export class WebhookService {
       }
 
       if (res.data.res === "UPDATE_ISSUE") {
-        const ramaName = `${res.data.ref}-${res.data.title}`;
         return await this.manageCreateBranch(res, ramaName);
+      }
+      if (res.data.res === "DELETE_ISSUE") {
+        return await this.closeGithubIssue(res, res.data.title);
       }
       return `No entro a ningun cambio de tarea valido ${this.appSvc.getFormattedDateTime()}`;
     } catch (error) {
@@ -67,7 +69,7 @@ export class WebhookService {
       );
 
       if (isBranchCreated.match("Error")) {
-        return  isBranchCreated;
+        return isBranchCreated;
       }
 
       const issueNumber = await this.findGithubIssue(
@@ -111,7 +113,7 @@ export class WebhookService {
       const urlRegex = /https:\/\/api\.github\.com\/repos[^\s]*/g;
       const repoUrl = description.match(urlRegex)?.[0];
 
-      if (repoUrl) {
+      if (repoUrl && payload.type === "userstory") {
         const response: DataResponseDTO = {
           config: { url: repoUrl },
           data: {
@@ -122,14 +124,12 @@ export class WebhookService {
           },
         };
 
-        if (payload.action === "create" && payload.type === "userstory") {
-          response.data.res = "CREATE_ISSUE";
-        } else if (
-          payload.action === "change" &&
-          payload.type === "userstory" &&
-          payload.change.diff.status.to === "In progress"
-        ) {
-          response.data.res = "UPDATE_ISSUE";
+        if (payload.action === "create") response.data.res = "CREATE_ISSUE";
+        if (payload.action === "change") {
+          if (payload.change.diff.status.to === "In progress")
+            response.data.res = "UPDATE_ISSUE";
+          if (payload.change.diff.status.to === "Finalizada")
+            response.data.res = "DELETE_ISSUE";
         }
 
         return response;
@@ -169,6 +169,35 @@ export class WebhookService {
   }
 
   /**
+   * Cierra un issue en GitHub utilizando su número del issue.
+   * @param branchName - El número de la ramma asociada el issue.
+   * @param config - La configuración de la solicitud para acceder al repositorio de GitHub.
+   * @returns Un objeto con los datos del issue actualizado o null si no se encuentra.
+   */
+  async closeGithubIssue(
+    config: DataResponseDTO,
+    branchName: string,
+  ): Promise<any | null> {
+    try {
+      const issueNumber = await this.findGithubIssue(branchName, config.config);
+      const updatedConfig = {
+        url: `${config.config.url}/issues/${issueNumber}`,
+        method: "PATCH",
+        headers: this.headers,
+        data: {
+          state: "closed",
+        },
+      };
+      await axios.patch(updatedConfig.url, updatedConfig.data, updatedConfig);
+
+      return `Se cerro el issue ${issueNumber} correctamente  ${this.appSvc.getFormattedDateTime()} Hora colombia`;
+    } catch (error) {
+      console.error("Worservice.closeGithubIssue():", error);
+      return ` Error al cerrar issue :  ${this.appSvc.getFormattedDateTime()} Hora colombia `;
+    }
+  }
+
+  /**
    * Crea un nuevo issue en GitHub con el título y descripción proporcionados.
    * @param title - El título del issue a crear.
    * @param body - La descripción del issue.
@@ -202,7 +231,10 @@ export class WebhookService {
    * @param repoUrl - La URL del repositorio donde se creará la rama.
    * @param branchName - El nombre de la nueva rama.
    */
-  async createGithubBranch(repoUrl: string, branchName: string):Promise<string> {
+  async createGithubBranch(
+    repoUrl: string,
+    branchName: string,
+  ): Promise<string> {
     const repoApiUrl = `${repoUrl}/git/refs`;
     const config: AxiosRequestConfig = {
       method: "GET",
@@ -221,13 +253,13 @@ export class WebhookService {
       };
 
       await axios.post(`${repoApiUrl}`, data, branchConfig);
-      return `Rama ${branchName} creada con éxito.`
+      return `Rama ${branchName} creada con éxito.`;
     } catch (error) {
       console.error("Error al crear la rama:", error);
-      if(error.response.data.message === "Reference already exists") {
-        return  `Error No se pudo crear La rama con nombre ${branchName} porque ya existe en el repo : ${this.appSvc.getFormattedDateTime()} Hora Colombiana`;
+      if (error.response.data.message === "Reference already exists") {
+        return `Error No se pudo crear La rama con nombre ${branchName} porque ya existe en el repo : ${this.appSvc.getFormattedDateTime()} Hora Colombiana`;
       }
-       return `Error: No se pudo crear la rama, abortando el proceso. ${this.appSvc.getFormattedDateTime()} Hora Colombiana`;
+      return `Error: No se pudo crear la rama, abortando el proceso. ${this.appSvc.getFormattedDateTime()} Hora Colombiana`;
     }
   }
 
@@ -241,7 +273,9 @@ export class WebhookService {
       return await axios.get(`${config.url}/commits/develop`, config);
     } catch (error) {
       console.error("webhookService.getLasCommit() ", error);
-      return `No se pudo obtener el último commit ${this.appSvc.getFormattedDateTime()} Hora Colombiana`;
+      throw new Error(
+        `Error No se pudo obtener el último commit ${this.appSvc.getFormattedDateTime()} Hora Colombiana`,
+      );
     }
   }
 
