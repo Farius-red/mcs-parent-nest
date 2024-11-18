@@ -8,7 +8,7 @@ import { AppService } from "../app.service";
 @Module({
   imports: [
     ConfigModule.forRoot({
-      isGlobal: true, // Hace que la configuración esté disponible globalmente
+      isGlobal: true,
     }),
   ],
   controllers: [WebhookController],
