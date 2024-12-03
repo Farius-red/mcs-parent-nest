@@ -34,14 +34,10 @@ export class WebhookService {
           res.config.url,
         );
       }
-
-      if (res.data.res === "UPDATE_ISSUE") {
-        return await this.manageCreateBranch(res, ramaName);
-      }
-      if (res.data.res === "DELETE_ISSUE") {
-        return await this.closeGithubIssue(res, res.data.title);
-      }
-      return `No entro a ningun cambio de tarea valido ${this.appSvc.getFormattedDateTime()}`;
+      if (res.data.res === "UPDATE_ISSUE") return await this.manageCreateBranch(res, ramaName);
+      
+      if (res.data.res === "DELETE_ISSUE")  return await this.closeGithubIssue(res, res.data.title);
+       return `No entro a ningun cambio de tarea valido ${this.appSvc.getFormattedDateTime()}`;
     } catch (error) {
       console.error("Error en sendTaskGit:", error);
       return `Algo Salio mal al an enviar Task a Git: ${this.appSvc.getFormattedDateTime()}`;
@@ -110,7 +106,7 @@ export class WebhookService {
       payload.data.subject.length > 0
     ) {
       const description = payload.data.description;
-      const urlRegex = /https:\/\/api\.github\.com\/repos[^\s]*/g;
+      const urlRegex = /https:\/\/api\.github\.com\/repos\/[\w\-]+\/[\w\-]+/g;
       const repoUrl = description.match(urlRegex)?.[0];
 
       if (repoUrl && payload.type === "userstory") {
