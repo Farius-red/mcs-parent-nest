@@ -2,7 +2,7 @@ import { Body, Controller, Logger, Post } from "@nestjs/common";
 import { McsKafkaNestService } from "../mcs-kafka-nest.service";
 import { ApiBody, ApiOperation } from "@nestjs/swagger";
 import { catchError, combineLatest, map, of } from "rxjs";
-import { KafkaResponse, RedisResponse } from "../models/serviceResponse";
+import { KafkaResponse } from "../models/serviceResponse";
 import { RedisService } from "../services/redis/redis.service";
 
 @Controller("kafka")
@@ -43,6 +43,25 @@ export class McsKafkaNestController {
     );
   }
 
+  @Post("send-kafka")
+  @ApiOperation({ summary: "Envia un mensaje a Kafka" })
+  @ApiBody({
+    description: "Se le pasa el nombre del tópico y el valor del mensaje.",
+    schema: {
+      type: "object",
+      properties: {
+        topic: {
+          type: "string",
+          description: "Nombre del tópico en Kafka",
+        },
+        message: {
+          type: "any",
+          description: "Mensaje a enviar",
+        },
+      },
+      required: ["topic", "message"],
+    },
+  })
   onlyKafka(@Body() body: { topic: string; message: any }) {
     return this.sendOnlyKafka(body).pipe(
       map((kafkaResponse) => ({
@@ -50,15 +69,6 @@ export class McsKafkaNestController {
       })),
     );
   }
-
-  onlyRedis(@Body() body: { topic: string; message: any }) {
-    return this.sendOnlyRedis(body).pipe(
-      map((redisResponse) => ({
-        redis: redisResponse,
-      })),
-    );
-  }
-
   private sendOnlyKafka(body: { topic: string; message: any }) {
     const { topic, message } = body;
     return this.kafkaService.sendMessage(topic, message).pipe(
@@ -75,15 +85,6 @@ export class McsKafkaNestController {
 
   private sendOnlyRedis(body: { topic: string; message: any }) {
     const { topic, message } = body;
-    return this.redisSvc.sendToRedis(topic, message).pipe(
-      catchError((error) => {
-        Logger.error(`Error al enviar a Redis: ${error.message}`);
-        return of({
-          success: false,
-          message: "Error al enviar a Redis",
-          error: error.message,
-        } as RedisResponse);
-      }),
-    );
+    return this.redisSvc.sendToRedis(topic, message);
   }
 }

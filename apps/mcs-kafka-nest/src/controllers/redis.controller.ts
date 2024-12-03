@@ -1,5 +1,5 @@
-import { Controller, Get, Query } from "@nestjs/common";
-import { ApiOperation, ApiQuery } from "@nestjs/swagger";
+import { Body, Controller, Get, Post, Query } from "@nestjs/common";
+import { ApiBody, ApiOperation, ApiQuery } from "@nestjs/swagger";
 import { RedisService } from "../services/redis/redis.service";
 import any = jasmine.any;
 
@@ -9,19 +9,7 @@ import any = jasmine.any;
 @Controller("redis")
 export class RedisKafkaController {
   constructor(private readonly redisSvc: RedisService) {}
-
-  /**
-   * Obtiene datos de Redis filtrados por un campo específico.
-   *
-   * @summary Consulta datos almacenados en Redis según el valor de un campo.
-   * @operationId getByField
-   * @param {string} key - Nombre del canal o prefijo para las claves en Redis.
-   * @param {string} fieldName - Nombre del campo a filtrar.
-   * @param {any} fieldValue - Valor del campo por el cual se filtra.
-   *
-   * @returns Observable con los datos filtrados.
-   */
-  @Get("get")
+  @Get("byFilter")
   @ApiOperation({
     summary: "Obtiene datos de Redis filtrados por un campo específico.",
   })
@@ -49,5 +37,43 @@ export class RedisKafkaController {
     @Query("fieldValue") fieldValue: any,
   ) {
     return this.redisSvc.getByField(key, fieldName, fieldValue);
+  }
+
+  @Get("get")
+  @ApiOperation({
+    summary: "Obtiene datos de Redis filtrados por un campo específico.",
+  })
+  @ApiQuery({
+    name: "key",
+    description: "Prefijo o nombre del canal en Redis.",
+    required: true,
+    type: String,
+  })
+  get(@Query("key") key: string) {
+    return this.redisSvc.get(key);
+  }
+
+  @Post("send")
+  @ApiOperation({ summary: "Envia un mensaje a Kafka y luego a Redis" })
+  @ApiBody({
+    description: "Se le pasa el nombre del tópico y el valor del mensaje.",
+    schema: {
+      type: "object",
+      properties: {
+        topic: {
+          type: "string",
+          description: "Nombre del del key de redis",
+        },
+        message: {
+          type: "any",
+          description: "Mensaje a enviar",
+        },
+      },
+      required: ["topic", "message"],
+    },
+  })
+  sendMessage(@Body() body: { topic: string; message: any }) {
+    const { topic, message } = body;
+    return this.redisSvc.sendToRedis(topic, message);
   }
 }
