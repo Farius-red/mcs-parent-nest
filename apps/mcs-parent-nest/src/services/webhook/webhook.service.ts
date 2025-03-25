@@ -54,6 +54,8 @@ export class WebhookService {
    *
    * @returns Promesa de la operación de actualización en Taiga si la rama se crea correctamente.
    */
+  
+  // eslint-disable-next-line max-lines-per-function
   async manageCreateBranch(
     res: DataResponseDTO,
     ramaName: string,
@@ -100,6 +102,7 @@ export class WebhookService {
    * @param payload - El payload del webhook que contiene la información de la tarea.
    * @returns Un objeto `DataResponseDTO` que contiene la configuración y los datos de la tarea.
    */
+  // eslint-disable-next-line max-lines-per-function
   async checkActionGit(payload: any): Promise<DataResponseDTO> {
     if (
       payload.data.description.length > 0 &&
@@ -109,7 +112,7 @@ export class WebhookService {
       const urlRegex = /https:\/\/api\.github\.com\/repos\/[\w\-]+\/[\w\-]+/g;
       const repoUrl = description.match(urlRegex)?.[0];
 
-      if (repoUrl && payload.type === "userstory") {
+      if (repoUrl && (payload.type === "userstory" || payload.type === "task")) {
         const response: DataResponseDTO = {
           config: { url: repoUrl },
           data: {
@@ -227,6 +230,7 @@ export class WebhookService {
    * @param repoUrl - La URL del repositorio donde se creará la rama.
    * @param branchName - El nombre de la nueva rama.
    */
+  // eslint-disable-next-line max-lines-per-function
   async createGithubBranch(
     repoUrl: string,
     branchName: string,
