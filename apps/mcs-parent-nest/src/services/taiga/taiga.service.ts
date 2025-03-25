@@ -26,8 +26,7 @@ export class TaigaService {
       }
 
       const response = await axios.post("https://api.taiga.io/api/v1/auth", {
-        type: "normal",
-        username: this.userName,
+        type: "normal",   username: this.userName,
         password: this.password,
       });
 
@@ -57,6 +56,7 @@ export class TaigaService {
    * @returns {Promise<string>} Una promesa que indica el éxito o el fallo de la operación.
    * @throws {Error} Si no se puede obtener el token o si ocurre algún error al actualizar la tarea.
    */
+  // eslint-disable-next-line max-lines-per-function
   async updateTaigaTask(
     taskId: number,
     cloneUrl: string,
@@ -71,9 +71,8 @@ export class TaigaService {
       }
       const config: AxiosRequestConfig = {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+        headers: {"Content-Type": "application/json",
+ Authorization: `Bearer ${token}`,
         },
       };
 

@@ -9,6 +9,7 @@ import any = jasmine.any;
 @Controller("redis")
 export class RedisKafkaController {
   constructor(private readonly redisSvc: RedisService) {}
+
   @Get("byFilter")
   @ApiOperation({
     summary: "Obtiene datos de Redis filtrados por un campo específico.",
@@ -38,6 +39,7 @@ export class RedisKafkaController {
   ) {
     return this.redisSvc.getByField(key, fieldName, fieldValue);
   }
+  
 
   @Get("get")
   @ApiOperation({
