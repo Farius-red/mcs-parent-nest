@@ -32,20 +32,44 @@ export class WebhookService {
       
       // Si hay ramas creadas (UPDATE_ISSUE), actualizar Taiga con toda la información
       if (repositories.length > 0 && repositories[0].data.res === "UPDATE_ISSUE") {
-        // Detectar el tipo de elemento de Taiga (task o userstory)
         const itemType = payload.type === 'task' ? 'task' : 'userstory';
         await this.updateTaigaWithAllRepos(repositories, ramaName, results, itemType);
       }
       
-      if (results.length === 0) {
-        return `No entro a ningun cambio de tarea valido ${this.appSvc.getFormattedDateTime()}`;
-      }
-      
-      return `Procesamiento completado para ${repositories.length} repositorio(s):\n${results.join('\n')}`;
+      return this.buildSuccessResponse(repositories, results);
     } catch (error) {
-      console.error("Error en sendTaskGit:", error);
-      return `Algo Salio mal al enviar Task a Git: ${this.appSvc.getFormattedDateTime()}`;
+      return this.handleSendTaskGitError(error);
     }
+  }
+
+  /**
+   * Construye la respuesta de éxito del procesamiento.
+   */
+  private buildSuccessResponse(repositories: DataResponseDTO[], results: string[]): string {
+    if (results.length === 0) {
+      return `No entro a ningun cambio de tarea valido ${this.appSvc.getFormattedDateTime()}`;
+    }
+    
+    return `Procesamiento completado para ${repositories.length} repositorio(s):\n${results.join('\n')}`;
+  }
+
+  /**
+   * Maneja los errores del método sendTaskGit.
+   */
+  private handleSendTaskGitError(error: any): string {
+    console.error("Error en sendTaskGit:", error);
+    
+    // Manejo específico de webhooks ignorados
+    if (error.message.includes("Webhook ignorado")) {
+      return `⏩ ${error.message} - ${this.appSvc.getFormattedDateTime()}`;
+    }
+    
+    // Manejo de errores de datos inválidos
+    if (error.message.includes("Datos de payload no válidos")) {
+      return `❌ Datos de payload no válidos para procesar - ${this.appSvc.getFormattedDateTime()}`;
+    }
+    
+    return `❌ Error al procesar Task en Git: ${error.message} - ${this.appSvc.getFormattedDateTime()}`;
   }
 
   /**
@@ -172,18 +196,36 @@ export class WebhookService {
    */
   // eslint-disable-next-line max-lines-per-function
   async checkActionGit(payload: any): Promise<DataResponseDTO[]> {
+    // Logging para debugging
+    console.log('🔍 Payload recibido:');
+    console.log(`- Acción: ${payload.action}`);
+    console.log(`- Tipo: ${payload.type}`);
+    console.log(`- Estado actual: ${payload.data?.status?.name}`);
+    console.log(`- Cambios en diff:`, Object.keys(payload.change?.diff || {}));
+    console.log(`- ¿Tiene comentario?: ${!!payload.change?.comment}`);
+    
+    // Verificar si este webhook debe ser procesado
+    if (payload.action === "change") {
+      // Solo validar que tenemos la información mínima necesaria
+      if (!payload.data?.status?.name) {
+        console.log('⏩ Webhook ignorado: No se puede determinar el estado actual');
+        throw new Error("Webhook ignorado: Estado actual no disponible");
+      }
+    }
+    
     if (
       payload.data.description.length > 0 &&
       payload.data.subject.length > 0
     ) {
       const description = payload.data.description;
-      const urlRegex = /https:\/\/api\.github\.com\/repos\/[\w\-]+\/[\w\-]+/g;
-      const repoUrls = description.match(urlRegex) || [];
-
-      if (repoUrls.length > 0 && (payload.type === "userstory" || payload.type === "task")) {
+      
+      const uniqueRepoUrls = this.extractRepositoryUrls(description);
+      
+      if (uniqueRepoUrls.length > 0 && (payload.type === "userstory" || payload.type === "task")) {
         const responses: DataResponseDTO[] = [];
         
-        for (const repoUrl of repoUrls) {
+        for (const repoUrl of uniqueRepoUrls) {
+          console.log(`🔍 Procesando repositorio: ${this.getRepoName(repoUrl)}`);
           const response: DataResponseDTO = {
             config: { url: repoUrl },
             data: {
@@ -194,12 +236,34 @@ export class WebhookService {
             },
           };
 
-          if (payload.action === "create") response.data.res = "CREATE_ISSUE";
-          if (payload.action === "change") {
-            if (payload.change.diff.status.to === "In progress")
-              response.data.res = "UPDATE_ISSUE";
-            if (payload.change.diff.status.to === "Finalizada")
-              response.data.res = "DELETE_ISSUE";
+          if (payload.action === "create") {
+            response.data.res = "CREATE_ISSUE";
+          } else if (payload.action === "change") {
+            // Verificar si hay cambios en el estado
+            if (payload.change?.diff?.status?.to) {
+              if (payload.change.diff.status.to === "In progress") {
+                response.data.res = "UPDATE_ISSUE";
+                console.log(`✅ Acción asignada: UPDATE_ISSUE para ${this.getRepoName(repoUrl)}`);
+              } else if (payload.change.diff.status.to === "Finalizada") {
+                response.data.res = "DELETE_ISSUE";
+                console.log(`✅ Acción asignada: DELETE_ISSUE para ${this.getRepoName(repoUrl)}`);
+              }
+            } else {
+              // Si no hay cambios de estado, usar el estado actual
+              const currentStatus = payload.data?.status?.name;
+              console.log(`No hay diff de estado, usando estado actual: ${currentStatus}`);
+              
+              if (currentStatus === "In progress") {
+                response.data.res = "UPDATE_ISSUE";
+                console.log(`✅ Acción asignada: UPDATE_ISSUE para ${this.getRepoName(repoUrl)}`);
+              } else if (currentStatus === "Finalizada") {
+                response.data.res = "DELETE_ISSUE";
+                console.log(`✅ Acción asignada: DELETE_ISSUE para ${this.getRepoName(repoUrl)}`);
+              } else {
+                console.log(`Estado actual: ${currentStatus} - no requiere acción en GitHub`);
+                continue; // Saltar este repositorio
+              }
+            }
           }
           
           responses.push(response);
@@ -302,13 +366,50 @@ export class WebhookService {
     repoUrl: string,
   ): Promise<string> {
     try {
+      console.log(`🔄 Intentando crear issue en ${this.getRepoName(repoUrl)}`);
+      console.log(`- Título: "${title}"`);
+      console.log(`- URL del repo: ${repoUrl}`);
+      
+      // Verificar acceso al repositorio antes de crear el issue
+      const hasAccess = await this.verifyRepositoryAccess(repoUrl);
+      if (!hasAccess) {
+        return `Error: No se puede acceder al repositorio ${this.getRepoName(repoUrl)}. Verifica que el repositorio existe y tienes los permisos necesarios.`;
+      }
+      
       await this.executeCreateIssue(title, body, repoUrl);
-      console.log(`Issue creado con éxito en ${this.getRepoName(repoUrl)}`);
+      console.log(`✅ Issue creado con éxito en ${this.getRepoName(repoUrl)}`);
       return "Issue creado con éxito en GitHub";
     } catch (error) {
-      console.error(`Error al crear el issue en ${this.getRepoName(repoUrl)}:`, error);
-      return "Error al crear el issue en GitHub";
+      return this.handleCreateIssueError(error, repoUrl);
     }
+  }
+
+  /**
+   * Maneja los errores específicos al crear issues en GitHub.
+   */
+  private handleCreateIssueError(error: any, repoUrl: string): string {
+    console.error(`❌ Error al crear el issue en ${this.getRepoName(repoUrl)}:`, error);
+    
+    // Logging detallado del error
+    if (error.response) {
+      console.error(`- Status HTTP: ${error.response.status}`);
+      console.error(`- Mensaje de error:`, error.response.data);
+      console.error(`- Headers de respuesta:`, error.response.headers);
+      
+      // Errores específicos
+      if (error.response.status === 404) {
+        return `Error: Repositorio ${this.getRepoName(repoUrl)} no encontrado o sin acceso`;
+      } else if (error.response.status === 403) {
+        return `Error: Sin permisos para crear issues en ${this.getRepoName(repoUrl)}`;
+      } else if (error.response.status === 401) {
+        return `Error: Token de GitHub inválido o expirado`;
+      }
+    } else if (error.code) {
+      console.error(`- Error de red: ${error.code}`);
+      return `Error de conectividad al crear issue en ${this.getRepoName(repoUrl)}`;
+    }
+    
+    return `Error al crear el issue en GitHub: ${error.message}`;
   }
 
   /**
@@ -345,6 +446,12 @@ export class WebhookService {
     const repoApiUrl = `${repoUrl}/git/refs`;
 
     try {
+      // Verificar acceso al repositorio antes de crear la rama
+      const hasAccess = await this.verifyRepositoryAccess(repoUrl);
+      if (!hasAccess) {
+        return `Error: No se puede acceder al repositorio ${this.getRepoName(repoUrl)}. Verifica que el repositorio existe y tienes los permisos necesarios.`;
+      }
+
       // Usar reintentos para obtener el último commit
       const { data: defaultBranchData } = await this.retryWithBackoff(async () => {
         const config: AxiosRequestConfig = {
@@ -641,5 +748,92 @@ export class WebhookService {
     }).join('\n\n');
 
     return `🚀 **Desarrollo iniciado en múltiples repositorios**\n\n${repoSummary}\n\n⏰ ${this.appSvc.getFormattedDateTime()} Hora Colombiana`;
+  }
+
+  /**
+   * Extrae y limpia las URLs de repositorios de GitHub de la descripción.
+   * @param description - La descripción que contiene las URLs.
+   * @returns Array de URLs únicas de repositorios de GitHub API.
+   */
+  private extractRepositoryUrls(description: string): string[] {
+    // Buscar URLs de la API de GitHub
+    const apiUrlRegex = /https:\/\/api\.github\.com\/repos\/[\w\-]+\/[\w\-]+/g;
+    const apiUrls = description.match(apiUrlRegex) || [];
+    
+    // Buscar URLs de GitHub normales y convertirlas a API URLs
+    const githubUrlRegex = /https:\/\/github\.com\/([\w\-]+\/[\w\-]+)/g;
+    const githubMatches = [...description.matchAll(githubUrlRegex)];
+    const convertedUrls = githubMatches.map(match => 
+      `https://api.github.com/repos/${match[1]}`
+    );
+    
+    // Combinar todas las URLs y eliminar duplicados
+    const allUrls = [...apiUrls, ...convertedUrls];
+    const uniqueUrls = [...new Set(allUrls)];
+    
+    console.log(`📋 URLs encontradas: ${allUrls.length} total, ${uniqueUrls.length} únicas`);
+    console.log(`📋 URLs detectadas:`, allUrls);
+    console.log(`📋 URLs únicas finales:`, uniqueUrls);
+    
+    if (allUrls.length !== uniqueUrls.length) {
+      console.log(`🔄 Se eliminaron ${allUrls.length - uniqueUrls.length} URL(s) duplicada(s)`);
+    }
+    
+    return uniqueUrls;
+  }
+
+  /**
+   * Verifica si un repositorio de GitHub existe y es accesible.
+   * @param repoUrl - La URL del repositorio a verificar.
+   * @returns Promise<boolean> - true si el repositorio existe y es accesible.
+   */
+  private async verifyRepositoryAccess(repoUrl: string): Promise<boolean> {
+    try {
+      console.log(`🔍 Verificando acceso al repositorio: ${this.getRepoName(repoUrl)}`);
+      
+      await this.executeRepositoryCheck(repoUrl);
+      
+      console.log(`✅ Repositorio ${this.getRepoName(repoUrl)} es accesible`);
+      return true;
+    } catch (error) {
+      this.handleRepositoryAccessError(error, repoUrl);
+      return false;
+    }
+  }
+
+  /**
+   * Ejecuta la verificación de acceso al repositorio.
+   * @param repoUrl - La URL del repositorio a verificar.
+   */
+  private async executeRepositoryCheck(repoUrl: string): Promise<void> {
+    await this.retryWithBackoff(async () => {
+      const config: AxiosRequestConfig = {
+        method: "GET",
+        headers: this.headers,
+        url: repoUrl,
+        timeout: 10000,
+      };
+      return await axios.get(config.url, config);
+    });
+  }
+
+  /**
+   * Maneja los errores de verificación de acceso al repositorio.
+   * @param error - El error ocurrido.
+   * @param repoUrl - La URL del repositorio.
+   */
+  private handleRepositoryAccessError(error: any, repoUrl: string): void {
+    console.error(`❌ Error al verificar repositorio ${this.getRepoName(repoUrl)}:`, error);
+    
+    if (error.response) {
+      console.error(`- Status: ${error.response.status}`);
+      console.error(`- Mensaje:`, error.response.data);
+      
+      if (error.response.status === 404) {
+        console.error(`- El repositorio ${this.getRepoName(repoUrl)} no existe o no tienes acceso`);
+      } else if (error.response.status === 403) {
+        console.error(`- Sin permisos para acceder al repositorio ${this.getRepoName(repoUrl)}`);
+      }
+    }
   }
 }
