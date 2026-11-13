@@ -3,6 +3,12 @@ import axios, { AxiosRequestConfig } from "axios";
 import { AppService } from "../../app.service";
 import { ConfigService } from "@nestjs/config";
 
+export interface TaigaIssue {
+  id: number;
+  ref?: number;
+  subject: string;
+}
+
 /**
  * Servicio que interactúa con la API de Taiga para obtener el token de autenticación
  * y actualizar tareas en Taiga con la URL de clonación de un repositorio.
@@ -60,7 +66,7 @@ export class TaigaService {
     }
 
     console.log(`Obteniendo nuevo token de Taiga para usuario: ${this.userName}`);
-    
+
     const response = await axios.post("https://api.taiga.io/api/v1/auth", {
       type: "normal",
       username: this.userName,
@@ -75,7 +81,7 @@ export class TaigaService {
     // Cachear el token por 1 hora
     this.cachedToken = token;
     this.tokenExpiry = new Date(Date.now() + 60 * 60 * 1000);
-    
+
     console.log('Token de Taiga obtenido exitosamente');
     return token;
   }
@@ -110,15 +116,106 @@ export class TaigaService {
     try {
       const token = await this.obtenerTokenTaiga();
       const version = await this.getItemVersion(itemId, itemType, token);
-      
+
       await this.patchItem(itemId, itemType, version, cloneUrl, nameBranch, token);
-      
+
       console.log(`${itemType} ${itemId} actualizada exitosamente en Taiga`);
       return `${itemType === 'task' ? 'Tarea' : 'User Story'} de Taiga actualizada correctamente ${this.appSvc.getFormattedDateTime()}`;
     } catch (error) {
       console.error(`Error al actualizar la ${itemType} en Taiga:`, error);
       throw error; // Re-lanzar el error para que sea manejado por el webhook service
     }
+  }
+
+  /**
+   * Obtiene todos los issues del proyecto configurado, recorriendo la paginación.
+   *
+   * @returns Issues del proyecto de Taiga.
+   * @throws Error Si falta la configuración o Taiga no responde correctamente.
+   */
+  async getProjectIssues(): Promise<TaigaIssue[]> {
+    const projectId = this.getProjectId();
+    const token = await this.obtenerTokenTaiga();
+    const issues: TaigaIssue[] = [];
+    const pageSize = 100;
+    let page = 1;
+    let currentPage: TaigaIssue[];
+
+    do {
+      currentPage = await this.fetchIssuesPage(
+        projectId,
+        token,
+        page,
+        pageSize,
+      );
+      issues.push(...currentPage);
+      page += 1;
+    } while (currentPage.length === pageSize);
+
+    return issues;
+  }
+
+  /**
+   * Crea un issue en el proyecto configurado de Taiga.
+   *
+   * @param subject Título del issue.
+   * @param description Plantilla de producción con los datos del pedido.
+   * @returns Issue creado en Taiga.
+   * @throws Error Si Taiga no puede crear el issue.
+   */
+  async createIssue(
+    subject: string,
+    description: string,
+  ): Promise<TaigaIssue> {
+    const projectId = this.getProjectId();
+    const token = await this.obtenerTokenTaiga();
+    const response = await axios.post<TaigaIssue>(
+      "https://api.taiga.io/api/v1/issues",
+      { project: projectId, subject, description },
+      this.buildTaigaApiConfig(token),
+    );
+    return response.data;
+  }
+
+  private async fetchIssuesPage(
+    projectId: number,
+    token: string,
+    page: number,
+    pageSize: number,
+  ): Promise<TaigaIssue[]> {
+    const response = await axios.get<TaigaIssue[]>(
+      "https://api.taiga.io/api/v1/issues",
+      {
+        ...this.buildTaigaApiConfig(token),
+        params: { project: projectId, page, page_size: pageSize },
+      },
+    );
+    if (!Array.isArray(response.data)) {
+      throw new Error("Taiga devolvió una lista de issues con formato inválido");
+    }
+    return response.data;
+  }
+
+  private getProjectId(): number {
+    const projectId = Number(
+      this.configService.get<string>("TAIGA_PROJECT_ID"),
+    );
+    if (!Number.isInteger(projectId) || projectId <= 0) {
+      throw new Error(
+        "TAIGA_PROJECT_ID debe contener el ID numérico del proyecto de Taiga",
+      );
+    }
+    return projectId;
+  }
+
+  private buildTaigaApiConfig(token: string): AxiosRequestConfig {
+    return {
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      timeout: 20000,
+    };
   }
 
   /**

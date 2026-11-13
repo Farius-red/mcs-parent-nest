@@ -45,6 +45,27 @@ $ npm run start:dev
 $ npm run start:prod
 ```
 
+## Google Forms to Taiga: inflatable order issues
+
+The endpoint `POST /taiga/inflatable-order` accepts the response object keyed by
+the Google Form question titles, reads existing issues from Taiga, and creates a
+new issue through `POST /api/v1/issues`. Configure these environment variables
+in the deployment:
+
+- `GIT_USER` and `TIAGA_PASSWORD`: existing Taiga API credentials.
+- `TAIGA_PROJECT_ID`: numeric Taiga project ID where inflatable issues are created.
+- `INFLATABLE_CATALOG_URL`: HTTPS URL that downloads the public `.xlsx` catalog.
+- `INFLATABLE_ORDER_WEBHOOK_SECRET`: private shared secret for the Apps Script webhook.
+
+The Apps Script request must send the secret in the `x-webhook-secret` header.
+Store it in Script Properties rather than writing it directly into the script.
+Catalog matches with an ambiguous or missing product name do not invent dimensions;
+the generated issue marks those dimensions as not specified in the catalog.
+Lot allocation is serialized per application instance. Deployments with multiple
+replicas must add a distributed lock before accepting concurrent form submissions.
+See [Google Apps Script and Taiga setup](./docs/google-apps-script-taiga-setup.md)
+for the complete Apps Script code, trigger setup, and Taiga configuration steps.
+
 ## Test
 
 ```bash

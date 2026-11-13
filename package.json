@@ -32,6 +32,7 @@
     "@vendia/serverless-express": "^4.12.6",
     "axios": "^1.7.7",
     "dotenv": "^16.4.1",
+    "exceljs": "^4.4.0",
     "ioredis": "^5.4.1",
     "juliaositembackenexpress": "^1.0.9",
     "kafkajs": "^2.2.4",
