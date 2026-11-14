@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { InflatableOrderFormDto } from "../dto/inflatable-order.dto";
 import {
   extractProductDimensions,
@@ -66,6 +66,7 @@ ELEMENTOS OBLIGATORIOS:
 
 @Injectable()
 export class InflatableOrderService {
+  private readonly logger = new Logger(InflatableOrderService.name);
   private sequenceQueue: Promise<void> = Promise.resolve();
 
   constructor(
@@ -84,10 +85,17 @@ export class InflatableOrderService {
   ): Promise<InflatableOrderResult> {
     const order = this.normalizeOrder(payload);
     const catalogProduct = await this.catalogService.findProduct(order.product);
+    this.logger.log(
+      `Catalog lookup completed: matched=${Boolean(catalogProduct)}, category=${catalogProduct?.category ?? "not found"}`,
+    );
     const prefix = resolveLotPrefix(order.product, catalogProduct?.category);
-    return this.withSequenceLock(() =>
+    const result = await this.withSequenceLock(() =>
       this.createTaigaIssue(order, catalogProduct, prefix),
     );
+    this.logger.log(
+      `Inflatable order issue created: lotCode=${result.lotCode}, issueId=${result.issueId}, issueRef=${result.issueRef ?? "unknown"}`,
+    );
+    return result;
   }
 
   private normalizeOrder(payload: InflatableOrderFormDto): NormalizedOrder {

@@ -16,7 +16,7 @@ el microservicio:
 | `GIT_USER` | Usuario de Taiga que utilizará la API. |
 | `TIAGA_PASSWORD` | Contraseña de ese usuario. El nombre lleva `TIAGA` porque así lo lee el servicio existente. |
 | `TAIGA_PROJECT_ID` | ID numérico del proyecto Taiga en el que se consultarán y crearán issues. |
-| `INFLATABLE_CATALOG_URL` | URL HTTPS pública que descargue directamente el Excel del catálogo `.xlsx`. |
+| `INFLATABLE_CATALOG_URL` | URL HTTPS de la hoja de cálculo pública de Google Sheets. |
 | `INFLATABLE_ORDER_WEBHOOK_SECRET` | Secreto largo y aleatorio compartido con Apps Script. |
 
 No agregues las credenciales ni el secreto a Git. El `.env.example` contiene los
@@ -39,17 +39,25 @@ GET https://api.taiga.io/api/v1/projects/by_slug?slug=<slug-del-proyecto>
 El objeto del proyecto devuelto contiene `id`; ese número es el valor de
 `TAIGA_PROJECT_ID`.
 
-### URL del catálogo Excel
+### URL del catálogo en Google Sheets
 
-La URL debe devolver el archivo `.xlsx`, no la página HTML de vista previa de
-Drive. Si el catálogo está en Google Drive y tiene acceso público de lectura,
-usa una URL de descarga directa:
+Configura directamente la URL normal de la hoja, por ejemplo:
 
 ```text
-https://drive.google.com/uc?export=download&id=<ID-DEL-ARCHIVO>
+https://docs.google.com/spreadsheets/d/1I0URF1-jNhRJx7YThKXlUnfgBdojayRUc_H3jELiIQs/edit?gid=0#gid=0
 ```
 
-Confirma que el enlace se pueda descargar sin iniciar sesión antes de usarlo.
+El servicio toma el ID y el `gid` de esa ruta y consulta las filas de la hoja
+en formato CSV mediante Google Visualization; no necesita un enlace de descarga
+ni una copia local del `.xlsx`. Para que la lectura del servidor funcione sin
+credenciales, configura la hoja como **Cualquier persona que tenga el enlace:
+Lector**. El servicio actualiza su caché cada cinco minutos.
+
+La primera fila debe incluir columnas que contengan `CATEGORIA`,
+`NOMBRE PRODUCTO` y `DESCRIPCION`. Si el endpoint responde `502`, revisa los
+logs `Google Sheets response` y `InflatableCatalogService`: confirma que la
+respuesta sea HTTP 200 y tenga tipo `text/csv`; una página HTML normalmente
+indica que la hoja no tiene acceso público de lectura.
 
 ## 2. Configurar Apps Script
 

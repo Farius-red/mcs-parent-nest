@@ -1,6 +1,6 @@
 import { ConfigService } from "@nestjs/config";
+import { BadGatewayException } from "@nestjs/common";
 import axios, { AxiosResponse } from "axios";
-import * as ExcelJS from "exceljs";
 import { InflatableOrderFormDto } from "../dto/inflatable-order.dto";
 import {
   extractProductDimensions,
@@ -36,8 +36,12 @@ describe("InflatableOrderService", () => {
   it("extracts dimensions only when the catalog labels them", verifyDimensions);
   it("resolves lot prefixes from category and product name", verifyLotPrefixes);
   it(
-    "reads product category and measures from the Excel catalog",
+    "reads product category and measures directly from Google Sheets",
     verifyCatalogLookup,
+  );
+  it(
+    "rejects catalog responses that are not valid sheet data",
+    verifyInvalidCatalogResponse,
   );
   it(
     "serializes concurrent lot assignment and creates a Taiga issue",
@@ -84,38 +88,59 @@ function verifyLotPrefixes(): void {
 }
 
 async function verifyCatalogLookup(): Promise<void> {
-  const buffer = await createCatalogWorkbook();
-  jest.spyOn(axios, "get").mockResolvedValue({
-    data: buffer,
-  } as unknown as AxiosResponse<ArrayBuffer>);
-  const config = {
-    get: jest.fn().mockReturnValue("https://catalog.example/catalog.xlsx"),
-  } as unknown as ConfigService;
-  const service = new InflatableCatalogService(config);
-
+  const request = mockCatalogSheet(createCatalogCsv());
+  const service = createCatalogService(
+    "https://docs.google.com/spreadsheets/d/catalog-id/edit?gid=123#gid=123",
+  );
   const product = await service.findProduct("Minitobogan disney");
+  expect(request).toHaveBeenCalledWith(
+    "https://docs.google.com/spreadsheets/d/catalog-id/gviz/tq?tqx=out:csv&gid=123",
+    expect.objectContaining({ responseType: "text" }),
+  );
   expect(product?.category).toBe("MINI TOBOGAN");
   expect(extractProductDimensions(product?.description ?? "").fondo).toBe(
     "5 m",
   );
+  const continuedCategory = await service.findProduct("Minitobogan marvel");
+  expect(continuedCategory?.category).toBe("MINI TOBOGAN");
+  expect(continuedCategory?.description).toContain("3.50 ALTO");
 }
 
-async function createCatalogWorkbook(): Promise<Uint8Array> {
-  const workbook = new ExcelJS.Workbook();
-  const worksheet = workbook.addWorksheet("Catalogo");
-  worksheet.addRow([
-    "CATEGORIA",
-    "REFERENCIA",
-    "NOMBRE PRODUCTO",
-    "🏰DESCRIPCION",
-  ]);
-  worksheet.addRow([
-    "MINI TOBOGAN",
-    "MTOB25-002",
-    "MINI TOBOGAN DISNEY",
-    "MINI TOBOGAN 4.50 ALTO X 4 DE ANCHO X 5 DE FONDO",
-  ]);
-  return new Uint8Array(await workbook.xlsx.writeBuffer());
+async function verifyInvalidCatalogResponse(): Promise<void> {
+  jest.spyOn(axios, "get").mockResolvedValue({
+    data: "<html>login required</html>",
+    status: 200,
+    headers: { "content-type": "text/html" },
+  } as unknown as AxiosResponse<string>);
+  const service = createCatalogService(
+    "https://docs.google.com/spreadsheets/d/catalog-id/edit?gid=0",
+  );
+  await expect(service.findProduct("Minitobogan disney")).rejects.toThrow(
+    BadGatewayException,
+  );
+}
+
+function createCatalogCsv(): string {
+  return [
+    "CATEGORIA,REFERENCIA,NOMBRE PRODUCTO,🏰DESCRIPCION",
+    'MINI TOBOGAN,MTOB25-002,MINI TOBOGAN DISNEY,"MINI TOBOGAN 4.50 ALTO X 4 DE ANCHO X 5 DE FONDO"',
+    ',MTOB25-003,MINI TOBOGAN MARVEL,"MINI TOBOGAN, 3.50 ALTO X 3 DE ANCHO X 4 DE FONDO"',
+  ].join("\r\n");
+}
+
+function mockCatalogSheet(csv: string) {
+  return jest.spyOn(axios, "get").mockResolvedValue({
+    data: csv,
+    status: 200,
+    headers: { "content-type": "text/csv; charset=utf-8" },
+  } as unknown as AxiosResponse<string>);
+}
+
+function createCatalogService(url: string): InflatableCatalogService {
+  const config = {
+    get: jest.fn().mockReturnValue(url),
+  } as unknown as ConfigService;
+  return new InflatableCatalogService(config);
 }
 
 async function verifyConcurrentOrders(): Promise<void> {
