@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Headers,
+  Logger,
   Post,
   UnauthorizedException,
 } from "@nestjs/common";
@@ -15,6 +16,8 @@ import {
 
 @Controller("taiga")
 export class InflatableOrderController {
+  private readonly logger = new Logger(InflatableOrderController.name);
+
   constructor(
     private readonly orderService: InflatableOrderService,
     private readonly configService: ConfigService,
@@ -33,7 +36,14 @@ export class InflatableOrderController {
     @Headers("x-webhook-secret") webhookSecret?: string,
   ): Promise<InflatableOrderResult> {
     this.validateWebhookSecret(webhookSecret);
-    return this.orderService.createOrder(payload);
+    this.logger.log(
+      `Inflatable order webhook received: fields=${Object.keys(payload ?? {}).length}`,
+    );
+    const result = await this.orderService.createOrder(payload);
+    this.logger.log(
+      `Inflatable order webhook completed: lotCode=${result.lotCode}, issueId=${result.issueId}`,
+    );
+    return result;
   }
 
   private validateWebhookSecret(providedSecret?: string): void {

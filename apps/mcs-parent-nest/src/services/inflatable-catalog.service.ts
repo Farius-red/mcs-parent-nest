@@ -5,8 +5,7 @@ import {
   Logger,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import axios from "axios";
-import * as ExcelJS from "exceljs";
+import axios, { AxiosResponse } from "axios";
 
 export interface InflatableCatalogProduct {
   category: string;
@@ -78,68 +77,85 @@ export class InflatableCatalogService {
 
   private async fetchCatalog(): Promise<InflatableCatalogProduct[]> {
     const catalogUrl = this.configService.get<string>("INFLATABLE_CATALOG_URL");
-    this.validateCatalogUrl(catalogUrl);
-
+    const sheetCsvUrl = this.validateCatalogUrl(catalogUrl);
     try {
-      const response = await axios.get<ArrayBuffer>(catalogUrl, {
-        responseType: "arraybuffer",
+      const response = await axios.get<string>(sheetCsvUrl, {
+        responseType: "text",
         timeout: 20000,
+        validateStatus: () => true,
       });
-      return await this.parseWorkbook(Buffer.from(response.data));
+      return await this.parseCatalogResponse(response);
     } catch (error) {
-      this.logger.error(
-        "No fue posible descargar o leer el Excel del catálogo",
-        error,
-      );
+      this.logCatalogFailure(error);
       throw new BadGatewayException(
         "No fue posible consultar el catálogo de inflables",
       );
     }
   }
 
-  private validateCatalogUrl(catalogUrl: string | undefined): void {
+  private async parseCatalogResponse(
+    response: AxiosResponse<string>,
+  ): Promise<InflatableCatalogProduct[]> {
+    const csv = response.data.replace(/^\uFEFF/, "");
+    const contentType = response.headers["content-type"] ?? "unknown";
+    this.logger.log(
+      `Google Sheets response: status=${response.status}, contentType=${contentType}, characters=${csv.length}`,
+    );
+    if (response.status < 200 || response.status >= 300) {
+      throw new Error(
+        `Google Sheets respondió HTTP ${response.status}; verifica que la hoja permita lectura pública`,
+      );
+    }
+    return this.parseCsvCatalog(csv);
+  }
+
+  private parseCsvCatalog(csv: string): InflatableCatalogProduct[] {
+    const rows = parseCsvRows(csv);
+    const columns = this.findCatalogColumns(rows[0] ?? []);
+    let category = "";
+    const products = rows.slice(1).flatMap((row) => {
+      const product = this.readCatalogRow(row, columns, category);
+      category = product.category;
+      return product.name ? [product] : [];
+    });
+    this.validateCatalogRows(products);
+    return products;
+  }
+
+  private logCatalogFailure(error: unknown): void {
+    const reason = axios.isAxiosError(error)
+      ? `Fallo de red (${error.code ?? "sin código"})`
+      : error instanceof Error
+        ? error.message
+        : "Error desconocido";
+    this.logger.error(`No fue posible consultar la hoja de Google Sheets: ${reason}`);
+  }
+
+  private validateCatalogUrl(catalogUrl: string | undefined): string {
     if (!catalogUrl) {
       throw new InternalServerErrorException(
-        "Falta configurar INFLATABLE_CATALOG_URL con la URL pública del Excel",
+        "Falta configurar INFLATABLE_CATALOG_URL con la URL pública de Google Sheets",
       );
     }
-    if (new URL(catalogUrl).protocol !== "https:") {
-      throw new InternalServerErrorException(
-        "INFLATABLE_CATALOG_URL debe utilizar HTTPS",
-      );
-    }
+    return buildGoogleSheetsCsvUrl(catalogUrl);
   }
 
-  private async parseWorkbook(
-    buffer: Buffer,
-  ): Promise<InflatableCatalogProduct[]> {
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(buffer);
-    const worksheet = workbook.worksheets[0];
-    if (!worksheet) {
-      throw new Error("El Excel no contiene una hoja de catálogo");
-    }
-
-    const columns = this.findCatalogColumns(worksheet.getRow(1));
-    return this.readCatalogRows(worksheet, columns);
-  }
-
-  private findCatalogColumns(headerRow: ExcelJS.Row): {
+  private findCatalogColumns(headerRow: string[]): {
     category: number;
     name: number;
     description: number;
   } {
     const headers = new Map<string, number>();
-    headerRow.eachCell((cell, column) => {
-      headers.set(normalizeText(cell.text), column);
+    headerRow.forEach((header, index) => {
+      headers.set(normalizeText(header), index);
     });
 
     const category = this.findHeaderColumn(headers, "CATEGORIA");
     const name = this.findHeaderColumn(headers, "NOMBRE PRODUCTO");
     const description = this.findHeaderColumn(headers, "DESCRIPCION");
-    if (!category || !name || !description) {
+    if (category === undefined || name === undefined || description === undefined) {
       throw new Error(
-        "El Excel no contiene las columnas de categoría, nombre y descripción",
+        "La hoja no contiene las columnas de categoría, nombre y descripción",
       );
     }
     return { category, name, description };
@@ -154,36 +170,15 @@ export class InflatableCatalogService {
     )?.[1];
   }
 
-  private readCatalogRows(
-    worksheet: ExcelJS.Worksheet,
-    columns: { category: number; name: number; description: number },
-  ): InflatableCatalogProduct[] {
-    let category = "";
-    const products: InflatableCatalogProduct[] = [];
-    for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber += 1) {
-      const product = this.readCatalogRow(
-        worksheet.getRow(rowNumber),
-        columns,
-        category,
-      );
-      category = product.category;
-      if (product.name) {
-        products.push(product);
-      }
-    }
-    this.validateCatalogRows(products);
-    return products;
-  }
-
   private readCatalogRow(
-    row: ExcelJS.Row,
+    row: string[],
     columns: { category: number; name: number; description: number },
     previousCategory: string,
   ): InflatableCatalogProduct {
     return {
-      category: row.getCell(columns.category).text.trim() || previousCategory,
-      name: row.getCell(columns.name).text.trim(),
-      description: row.getCell(columns.description).text.trim(),
+      category: row[columns.category]?.trim() || previousCategory,
+      name: row[columns.name]?.trim() ?? "",
+      description: row[columns.description]?.trim() ?? "",
     };
   }
 
@@ -192,6 +187,41 @@ export class InflatableCatalogService {
       throw new Error("El Excel del catálogo no contiene productos");
     }
   }
+}
+
+function parseCsvRows(csv: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  const expression = /(^|,|\r?\n)(?:"((?:[^"]|"")*)"|([^",\r\n]*))/g;
+  for (const match of csv.matchAll(expression)) {
+    if (match[1].endsWith("\n")) {
+      rows.push(row);
+      row = [];
+    }
+    row.push((match[2] ?? match[3] ?? "").replace(/""/g, '"'));
+  }
+  if (row.length) rows.push(row);
+  return rows.filter((values) => values.some((value) => value.trim()));
+}
+
+function buildGoogleSheetsCsvUrl(catalogUrl: string): string {
+  const sheetUrl = new URL(catalogUrl);
+  if (sheetUrl.protocol !== "https:" || sheetUrl.hostname !== "docs.google.com") {
+    throw new InternalServerErrorException(
+      "INFLATABLE_CATALOG_URL debe ser una URL HTTPS de docs.google.com",
+    );
+  }
+  const spreadsheetId = sheetUrl.pathname.match(/^\/spreadsheets\/d\/([^/]+)/)?.[1];
+  if (!spreadsheetId) {
+    throw new InternalServerErrorException(
+      "INFLATABLE_CATALOG_URL debe apuntar a una hoja de Google Sheets",
+    );
+  }
+  const gid =
+    sheetUrl.searchParams.get("gid") ??
+    new URLSearchParams(sheetUrl.hash.slice(1)).get("gid") ??
+    "0";
+  return `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&gid=${encodeURIComponent(gid)}`;
 }
 
 /**
